@@ -46,7 +46,12 @@ const generatePoemFromImageFlow = ai.defineFlow(
     outputSchema: GeneratePoemFromImageOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    const {output, usage} = await prompt(input);
+
+    if (!output || !output.poem) {
+      console.error('AI failed to generate poem or output format is incorrect.', { input, output, usage });
+      throw new Error('The AI failed to generate a poem. The image might be unsuitable or there was an internal issue.');
+    }
+    return output;
   }
 );
