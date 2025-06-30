@@ -13,28 +13,53 @@ export function PoemGenerator() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [poem, setPoem] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const MAX_FILE_SIZE_MB = 10;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
   const handleFileChange = (file: File | null) => {
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({
             variant: 'destructive',
             title: 'Invalid File Type',
-            description: 'Please upload an image file (e.g., JPG, PNG, GIF).',
+            description: `Please upload an image file (${ACCEPTED_IMAGE_TYPES.map(type => type.split('/')[1]).join(', ')}).`,
         });
         return;
     }
 
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast({
+            variant: 'destructive',
+            title: 'File Too Large',
+            description: `Please upload an image smaller than ${MAX_FILE_SIZE_MB}MB.`,
+        });
+        return;
+    }
+
+    setIsReadingFile(true);
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result as string);
       setPoem(null);
       setError(null);
+      setIsReadingFile(false);
     };
+    reader.onerror = () => {
+        setError('Failed to read file.');
+        toast({
+            variant: 'destructive',
+            title: 'File Read Error',
+            description: 'Could not read the selected file. Please try again.',
+        });
+        setIsReadingFile(false);
+    }
     reader.readAsDataURL(file);
   };
 
@@ -106,11 +131,21 @@ export function PoemGenerator() {
             onClick={() => fileInputRef.current?.click()}
           >
             <input type="file" ref={fileInputRef} onChange={onFileChange} className="hidden" accept="image/*" />
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground group-hover:text-primary transition-colors" />
-            <p className="mt-4 font-body text-muted-foreground">
-              <span className="text-primary font-semibold">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF up to 10MB</p>
+            <input type="file" ref={fileInputRef} onChange={onFileChange} className="hidden" accept={ACCEPTED_IMAGE_TYPES.join(',')} />
+            {isReadingFile ? (
+              <>
+                <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin" />
+                <p className="mt-4 font-body text-muted-foreground">Reading file...</p>
+              </>
+            ) : (
+              <>
+                <Upload className="mx-auto h-12 w-12 text-muted-foreground group-hover:text-primary transition-colors" />
+                <p className="mt-4 font-body text-muted-foreground">
+                  <span className="text-primary font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{ACCEPTED_IMAGE_TYPES.map(t => t.split('/')[1].toUpperCase()).join(', ')} up to {MAX_FILE_SIZE_MB}MB</p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
