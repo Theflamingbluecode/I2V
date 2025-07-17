@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition, useCallback } from 'react';
 import Image from 'next/image';
-import { Upload, Copy, RefreshCw, Sparkles, Loader2, Image as ImageIcon, FileWarning } from 'lucide-react';
+import { Upload, Copy, RefreshCw, Sparkles, Loader2, Image as ImageIcon, FileWarning, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -14,14 +14,14 @@ export function PoemGenerator() {
   const [poem, setPoem] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-
   const MAX_FILE_SIZE_MB = 10;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
   const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
   const handleFileChange = (file: File | null) => {
     if (!file) return;
 
@@ -69,10 +69,20 @@ export function PoemGenerator() {
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
     handleFileChange(e.dataTransfer.files?.[0] ?? null);
   };
 
@@ -99,10 +109,12 @@ export function PoemGenerator() {
   const handleCopy = () => {
     if (!poem) return;
     navigator.clipboard.writeText(poem);
+    setIsCopied(true);
     toast({
       title: 'Poem Copied!',
       description: 'The verses are now in your clipboard.',
     });
+    setTimeout(() => setIsCopied(false), 2000); // Revert icon after 2 seconds
   };
 
   const handleReset = () => {
@@ -120,6 +132,8 @@ export function PoemGenerator() {
         className="max-w-2xl mx-auto shadow-lg border-primary/20"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onDragLeave={handleDragLeave}
+        data-dragging={isDragging}
       >
         <CardHeader className="text-center">
           <CardTitle className="font-headline text-2xl">Start with a Photo</CardTitle>
@@ -170,8 +184,8 @@ export function PoemGenerator() {
               Generated Poem
             </CardTitle>
             {poem && !isPending && (
-              <Button variant="ghost" size="icon" onClick={handleCopy} aria-label="Copy poem">
-                <Copy className="h-5 w-5" />
+              <Button variant="ghost" size="icon" onClick={handleCopy} aria-label="Copy poem" disabled={isCopied}>
+                {isCopied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
               </Button>
             )}
           </CardHeader>
@@ -185,20 +199,20 @@ export function PoemGenerator() {
               </div>
             )}
             {error && !isPending && (
-              <div className="text-center text-destructive font-body flex flex-col items-center gap-2">
+              <div className="text-center text-destructive font-body flex flex-col items-center gap-2 animate-in fade-in duration-500">
                 <FileWarning className="w-10 h-10" />
                 <p className="font-semibold">Oops! Something went wrong.</p>
                 <p className="text-sm">{error}</p>
               </div>
             )}
             {!isPending && !error && !poem && (
-                 <div className="text-center text-muted-foreground font-body flex flex-col items-center gap-2">
+                 <div className="text-center text-muted-foreground font-body flex flex-col items-center gap-2 animate-in fade-in duration-500">
                     <ImageIcon className="w-10 h-10" />
                     <p>Your poem will appear here.</p>
                 </div>
             )}
             {poem && !isPending && (
-              <p className="font-body text-lg/relaxed whitespace-pre-wrap animate-in fade-in duration-700">
+              <p className="font-body text-lg/relaxed whitespace-pre-wrap animate-in fade-in-up duration-700">
                 {poem}
               </p>
             )}
