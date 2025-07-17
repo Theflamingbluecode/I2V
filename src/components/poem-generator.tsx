@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition, useCallback } from 'react';
 import Image from 'next/image';
-import { Upload, Copy, RefreshCw, Sparkles, Loader2, Image as ImageIcon, FileWarning } from 'lucide-react';
+import { Upload, Copy, RefreshCw, Sparkles, Loader2, Image as ImageIcon, FileWarning, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -13,28 +13,55 @@ export function PoemGenerator() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [poem, setPoem] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const MAX_FILE_SIZE_MB = 10;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
   const handleFileChange = (file: File | null) => {
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({
             variant: 'destructive',
             title: 'Invalid File Type',
-            description: 'Please upload an image file (e.g., JPG, PNG, GIF).',
+            description: `Please upload an image file (${ACCEPTED_IMAGE_TYPES.map(type => type.split('/')[1]).join(', ')}).`,
         });
         return;
     }
 
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast({
+            variant: 'destructive',
+            title: 'File Too Large',
+            description: `Please upload an image smaller than ${MAX_FILE_SIZE_MB}MB.`,
+        });
+        return;
+    }
+
+    setIsReadingFile(true);
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result as string);
       setPoem(null);
       setError(null);
+      setIsReadingFile(false);
     };
+    reader.onerror = () => {
+        setError('Failed to read file.');
+        toast({
+            variant: 'destructive',
+            title: 'File Read Error',
+            description: 'Could not read the selected file. Please try again.',
+        });
+        setIsReadingFile(false);
+    }
     reader.readAsDataURL(file);
   };
 
@@ -44,10 +71,20 @@ export function PoemGenerator() {
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
     handleFileChange(e.dataTransfer.files?.[0] ?? null);
   };
 
@@ -74,10 +111,12 @@ export function PoemGenerator() {
   const handleCopy = () => {
     if (!poem) return;
     navigator.clipboard.writeText(poem);
+    setIsCopied(true);
     toast({
       title: 'Poem Copied!',
       description: 'The verses are now in your clipboard.',
     });
+    setTimeout(() => setIsCopied(false), 2000); // Revert icon after 2 seconds
   };
 
   const handleReset = () => {
@@ -95,6 +134,8 @@ export function PoemGenerator() {
         className="max-w-2xl mx-auto shadow-lg border-primary/20"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onDragLeave={handleDragLeave}
+        data-dragging={isDragging}
       >
         <CardHeader className="text-center">
           <CardTitle className="font-headline text-2xl">Start with a Photo</CardTitle>
@@ -106,11 +147,21 @@ export function PoemGenerator() {
             onClick={() => fileInputRef.current?.click()}
           >
             <input type="file" ref={fileInputRef} onChange={onFileChange} className="hidden" accept="image/*" />
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground group-hover:text-primary transition-colors" />
-            <p className="mt-4 font-body text-muted-foreground">
-              <span className="text-primary font-semibold">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF up to 10MB</p>
+            <input type="file" ref={fileInputRef} onChange={onFileChange} className="hidden" accept={ACCEPTED_IMAGE_TYPES.join(',')} />
+            {isReadingFile ? (
+              <>
+                <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin" />
+                <p className="mt-4 font-body text-muted-foreground">Reading file...</p>
+              </>
+            ) : (
+              <>
+                <Upload className="mx-auto h-12 w-12 text-muted-foreground group-hover:text-primary transition-colors" />
+                <p className="mt-4 font-body text-muted-foreground">
+                  <span className="text-primary font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{ACCEPTED_IMAGE_TYPES.map(t => t.split('/')[1].toUpperCase()).join(', ')} up to {MAX_FILE_SIZE_MB}MB</p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -135,8 +186,8 @@ export function PoemGenerator() {
               Generated Poem
             </CardTitle>
             {poem && !isPending && (
-              <Button variant="ghost" size="icon" onClick={handleCopy} aria-label="Copy poem">
-                <Copy className="h-5 w-5" />
+              <Button variant="ghost" size="icon" onClick={handleCopy} aria-label="Copy poem" disabled={isCopied}>
+                {isCopied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
               </Button>
             )}
           </CardHeader>
@@ -150,20 +201,20 @@ export function PoemGenerator() {
               </div>
             )}
             {error && !isPending && (
-              <div className="text-center text-destructive font-body flex flex-col items-center gap-2">
+              <div className="text-center text-destructive font-body flex flex-col items-center gap-2 animate-in fade-in duration-500">
                 <FileWarning className="w-10 h-10" />
                 <p className="font-semibold">Oops! Something went wrong.</p>
                 <p className="text-sm">{error}</p>
               </div>
             )}
             {!isPending && !error && !poem && (
-                 <div className="text-center text-muted-foreground font-body flex flex-col items-center gap-2">
+                 <div className="text-center text-muted-foreground font-body flex flex-col items-center gap-2 animate-in fade-in duration-500">
                     <ImageIcon className="w-10 h-10" />
                     <p>Your poem will appear here.</p>
                 </div>
             )}
             {poem && !isPending && (
-              <p className="font-body text-lg/relaxed whitespace-pre-wrap animate-in fade-in duration-700">
+              <p className="font-body text-lg/relaxed whitespace-pre-wrap animate-in fade-in-up duration-700">
                 {poem}
               </p>
             )}
